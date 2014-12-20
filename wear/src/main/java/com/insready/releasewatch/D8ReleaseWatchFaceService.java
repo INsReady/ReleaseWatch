@@ -23,24 +23,38 @@ import android.text.format.Time;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.common.api.Result;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.MessageApi;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.NodeApi;
+import com.google.android.gms.wearable.Wearable;
+
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
-  private static final String TAG = "AnalogWatchFaceService";
+  private static final String TAG = "D8WatchFaceService";
 
   /**
    * Update rate in milliseconds for interactive mode. We update once a second to advance the
    * second hand.
    */
   private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
+  private String GET_D8_RELEASE_DATA = "drupal8";
 
   @Override
   public Engine onCreateEngine() {
     return new Engine();
   }
 
-  private class Engine extends CanvasWatchFaceService.Engine {
+  private class Engine extends CanvasWatchFaceService.Engine implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
     static final int MSG_UPDATE_TIME = 0;
 
     /* graphic objects */
@@ -68,6 +82,29 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
     int mNumMeetings;
 
+    GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(D8ReleaseWatchFaceService.this)
+            .addConnectionCallbacks(this)
+            .addOnConnectionFailedListener(this)
+                    // Request access only to the Wearable API
+            .addApi(Wearable.API)
+            .build();
+
+    @Override
+    public void onConnected(Bundle bundle) {
+      Log.d(TAG, "onConnected: " + bundle);
+      // Now you can use the Data Layer API
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+      Log.d(TAG, "onConnectionSuspended: " + i);
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+      Log.d(TAG, "onConnectionFailed: " + connectionResult);
+    }
+
     /**
      * Handler to update the time once a second in interactive mode.
      */
@@ -93,15 +130,48 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
     private AsyncTask<Void, Void, Integer> mLoadMeetingsTask;
 
-    /** Handler to load the meetings once a minute in interactive mode. */
+    /**
+     * Handler to load the meetings once a minute in interactive mode.
+     */
     final Handler mLoadMeetingsHandler = new Handler() {
       @Override
       public void handleMessage(Message message) {
         switch (message.what) {
           case MSG_LOAD_MEETINGS:
             cancelLoadMeetingTask();
-            mLoadMeetingsTask = new LoadMeetingsTask();
+            mLoadMeetingsTask = new LoadD8ReleaseInfoTask();
             mLoadMeetingsTask.execute();
+            // the connected device to send the message to
+            PendingResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient);
+
+            nodes.setResultCallback(new ResultCallback<NodeApi.GetConnectedNodesResult>() {
+              @Override
+              public void onResult(final NodeApi.GetConnectedNodesResult result) {
+                if (result.getStatus().isSuccess()) {
+                  Log.d(TAG, "Connected Nodes: " + result.getNodes().size());
+                }
+                for (Node node : result.getNodes()) {
+                  String msg = "Testing";
+                  if (mGoogleApiClient == null) {
+                    Log.d(TAG, "mGoogleApiClient initialization failed");
+                  } else {
+                    Log.d(TAG, "mGoogleApiClient initialization succeeded");
+                  }
+
+                  PendingResult msgResult = Wearable.MessageApi.sendMessage(
+                          mGoogleApiClient, node.getId(), GET_D8_RELEASE_DATA, msg.getBytes());
+                  msgResult.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+                    @Override
+                    public void onResult(final MessageApi.SendMessageResult feedback) {
+                      if (!feedback.getStatus().isSuccess()) {
+                        Log.e(TAG, "ERROR: failed to send Message: " + feedback.getStatus());
+                      }
+                    }
+                  });
+                }
+              }
+            });
+
             break;
         }
       }
@@ -161,6 +231,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
             /* allocate an object to hold the time */
       mTime = new Time();
+
     }
 
     @Override
@@ -288,6 +359,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       }
 
       if (visible) {
+        mGoogleApiClient.connect();
         registerReceiver();
 
         // Update time zone in case it changed while we weren't visible.
@@ -298,6 +370,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         unregisterReceiver();
         mLoadMeetingsHandler.removeMessages(MSG_LOAD_MEETINGS);
         cancelLoadMeetingTask();
+        // TODO Need to do something to optimize mGoogleApiClient connection
       }
 
       // Whether the timer should be running depends on whether we're visible (as well as
@@ -348,7 +421,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
      * Asynchronous task to load the meetings from the content provider and report the number of
      * meetings back via {@link #onMeetingsLoaded}.
      */
-    private class LoadMeetingsTask extends AsyncTask<Void, Void, Integer> {
+    private class LoadD8ReleaseInfoTask extends AsyncTask<Void, Void, Integer> {
       private PowerManager.WakeLock mWakeLock;
 
       @Override
@@ -405,5 +478,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         mLoadMeetingsTask.cancel(true);
       }
     }
+
   }
+
 }
