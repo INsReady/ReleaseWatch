@@ -11,11 +11,9 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.os.PowerManager;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
@@ -26,7 +24,6 @@ import android.view.SurfaceHolder;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.common.api.Result;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
@@ -35,14 +32,10 @@ import com.google.android.gms.wearable.DataItem;
 import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.MessageApi;
-import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
 
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -72,6 +65,15 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
     Paint mMinutePaint;
     Paint mSecondPaint;
     Paint mTickPaint;
+    Integer mCurCritical;
+    Integer mFromYesterdayCritical;
+    Integer mCurMajor;
+    Integer mFromYesterdayMajor;
+    String mEstimate;
+    Paint mCriticalPaint;
+    Paint mMajorPaint;
+    Paint mEstimatePaint;
+    Paint mMajorBGPaint;
 
     boolean mMute;
 
@@ -86,14 +88,12 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
     boolean mRegisteredTimeZoneReceiver = false;
 
-    static final int MSG_LOAD_MEETINGS = 0;
-
-    int mNumMeetings;
+    static final int MSG_LOAD_D8RELEASEDATA = 0;
 
     GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(D8ReleaseWatchFaceService.this)
             .addConnectionCallbacks(this)
             .addOnConnectionFailedListener(this)
-            // Request access only to the Wearable API
+                    // Request access only to the Wearable API
             .addApi(Wearable.API)
             .build();
 
@@ -137,17 +137,14 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       }
     };
 
-    private AsyncTask<Void, Void, Integer> mLoadMeetingsTask;
-
     /**
      * Handler to load the meetings once a minute in interactive mode.
      */
-    final Handler mLoadMeetingsHandler = new Handler() {
+    final Handler mLoadD8ReleaseDataHandler = new Handler() {
       @Override
       public void handleMessage(Message message) {
         switch (message.what) {
-          case MSG_LOAD_MEETINGS:
-            cancelLoadMeetingTask();
+          case MSG_LOAD_D8RELEASEDATA:
             // the connected device to send the message to
             PendingResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient);
 
@@ -235,7 +232,27 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       mTickPaint.setStrokeWidth(2.f);
       mTickPaint.setAntiAlias(true);
 
-            /* allocate an object to hold the time */
+      mCriticalPaint = new Paint();
+      mCriticalPaint.setARGB(255, 255, 255, 255);
+      mCriticalPaint.setTextSize(40);
+      mCriticalPaint.setAntiAlias(true);
+
+      mMajorPaint = new Paint();
+      mMajorPaint.setARGB(255, 255, 255, 255);
+      mMajorPaint.setTextSize(25);
+      mMajorPaint.setAntiAlias(true);
+
+      mMajorBGPaint = new Paint();
+      mMajorBGPaint.setARGB(255, 255, 153, 0);
+      mMajorBGPaint.setAntiAlias(true);
+
+      mEstimatePaint = new Paint();
+      mEstimatePaint.setARGB(255, 255, 255, 255);
+      mEstimatePaint.setTextSize(18);
+      mEstimatePaint.setAntiAlias(true);
+
+
+      /* allocate an object to hold the time */
       mTime = new Time();
 
     }
@@ -314,6 +331,18 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       }
       canvas.drawBitmap(mBackgroundScaledBitmap, 0, 0, null);
 
+      // Draw D8 Release info
+      if (!isInAmbientMode() && mCurCritical != null && mCurMajor != null && mEstimate != null) {
+        Log.d(TAG, "Drawing D8 Data.");
+        canvas.drawCircle(152f, 238f, 48f, mSecondPaint);
+        canvas.drawText(mCurCritical + "", 127f, 250f, mCriticalPaint);
+        canvas.drawText(mFromYesterdayCritical + "", 143f, 270f, mEstimatePaint);
+        canvas.drawCircle(193f, 120f, 38f, mMajorBGPaint);
+        canvas.drawText(mCurMajor + "", 170f, 130f, mMajorPaint);
+        canvas.drawText(mFromYesterdayMajor + "", 180f, 150f, mEstimatePaint);
+        canvas.drawText(mEstimate, 40f, 150f, mEstimatePaint);
+      }
+
       // Find the center. Ignore the window insets so that, on round watches with a
       // "chin", the watch face is centered on the entire screen, not just the usable
       // portion.
@@ -355,6 +384,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       float hrX = (float) Math.sin(hrRot) * hrLength;
       float hrY = (float) -Math.cos(hrRot) * hrLength;
       canvas.drawLine(centerX, centerY, centerX + hrX, centerY + hrY, mHourPaint);
+
     }
 
     @Override
@@ -371,11 +401,10 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         // Update time zone in case it changed while we weren't visible.
         mTime.clear(TimeZone.getDefault().getID());
         mTime.setToNow();
-        mLoadMeetingsHandler.sendEmptyMessage(MSG_LOAD_MEETINGS);
+        mLoadD8ReleaseDataHandler.sendEmptyMessage(MSG_LOAD_D8RELEASEDATA);
       } else {
         unregisterReceiver();
-        mLoadMeetingsHandler.removeMessages(MSG_LOAD_MEETINGS);
-        cancelLoadMeetingTask();
+        mLoadD8ReleaseDataHandler.removeMessages(MSG_LOAD_D8RELEASEDATA);
         // TODO Need to do something to optimize mGoogleApiClient connection
       }
 
@@ -442,25 +471,20 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
           if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Config DataItem updated:" + dataMap);
           }
-          //TODO update
-          Log.d(TAG, "Project Status Current Criticals: " + dataMap.getInt("CurrentCritical"));
-          Log.d(TAG, "D8 Release Date Estimate: " + dataMap.getString("Estimate"));
+          mCurCritical = dataMap.getInt("CurrentCritical");
+          mCurMajor = dataMap.getInt("CurrentMajor");
+          mFromYesterdayCritical = dataMap.getInt("fromYesterdayCritical");
+          mFromYesterdayMajor = dataMap.getInt("fromYesterdayMajor");
+          mEstimate = dataMap.getString("Estimate");
+          Log.d(TAG, "Project Status Current Criticals: " + mCurCritical);
+          Log.d(TAG, "Project Status Current Majors: " + mCurMajor);
+          Log.d(TAG, "Project Status from Yesterday Critical: " + mFromYesterdayCritical);
+          Log.d(TAG, "Project Status from Yesterday Major: " + mFromYesterdayMajor);
+          Log.d(TAG, "D8 Release Date Estimate: " + mEstimate);
+          invalidate();
         }
       } finally {
         dataEvents.close();
-      }
-    }
-
-    private void onMeetingsLoaded(Integer result) {
-      if (result != null) {
-        mNumMeetings = result;
-        invalidate();
-      }
-    }
-
-    private void cancelLoadMeetingTask() {
-      if (mLoadMeetingsTask != null) {
-        mLoadMeetingsTask.cancel(true);
       }
     }
 

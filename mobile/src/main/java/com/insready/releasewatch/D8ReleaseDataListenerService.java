@@ -41,8 +41,8 @@ public class D8ReleaseDataListenerService extends WearableListenerService {
       DrupalReleaseDateServices D8ReleaseDateAPI = restAdapter.create(DrupalReleaseDateServices.class);
       Current currentStatus = D8ReleaseDateAPI.projectStatus().getData().getCurrent();
       Day yesterdayStatus = D8ReleaseDateAPI.projectStatus().getData().getDay();
-      int currentCriticalNum = currentStatus.getCriticalBugs() + currentStatus.getCriticalTasks() + currentStatus.getCriticalRtbc();
-      int currentMajorNum = currentStatus.getMajorBugs() + currentStatus.getMajorTasks() + currentStatus.getMajorRtbc();
+      int currentCriticalNum = currentStatus.getCriticalBugs() + currentStatus.getCriticalTasks();
+      int currentMajorNum = currentStatus.getMajorBugs() + currentStatus.getMajorTasks();
       int yesterdayCriticalNum = yesterdayStatus.getCriticalBugs() + yesterdayStatus.getCriticalTasks() + yesterdayStatus.getCriticalRtbc();
       int yesterdayMajorNum = yesterdayStatus.getMajorBugs() + yesterdayStatus.getMajorTasks() + yesterdayStatus.getMajorRtbc();
       String estimate = D8ReleaseDateAPI.releaseEstimate().getData().get(0).getEstimate();
@@ -56,8 +56,8 @@ public class D8ReleaseDataListenerService extends WearableListenerService {
       PutDataMapRequest dataMap = PutDataMapRequest.create(UPDATE_D8_RELEASE_DATA);
       dataMap.getDataMap().putInt("CurrentCritical", currentCriticalNum);
       dataMap.getDataMap().putInt("CurrentMajor", currentMajorNum);
-      dataMap.getDataMap().putInt("fromYesterday", currentCriticalNum - yesterdayCriticalNum);
-      dataMap.getDataMap().putInt("YesterdayMajor", currentMajorNum - yesterdayMajorNum);
+      dataMap.getDataMap().putInt("fromYesterdayCritical", currentCriticalNum - yesterdayCriticalNum);
+      dataMap.getDataMap().putInt("fromYesterdayMajor", currentMajorNum - yesterdayMajorNum);
       dataMap.getDataMap().putString("Estimate", estimate);
       dataMap.getDataMap().putLong("Timestamp", new Date().getTime());
       PutDataRequest request = dataMap.asPutDataRequest();
