@@ -335,7 +335,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       // Draw D8 Release info
       if (!isInAmbientMode() && mCurCritical != null && mCurMajor != null && mEstimate != null) {
         Log.d(TAG, "Drawing D8 Data.");
-        canvas.drawCircle(152f, 238f, 48f, mSecondPaint);
+        canvas.drawCircle(152f, 238f, 48.5f, mSecondPaint);
         canvas.drawText(mCurCritical + "", 127f, 250f, mCriticalPaint);
         canvas.drawText(mFromYesterdayCritical + "", 143f, 270f, mEstimatePaint);
         canvas.drawCircle(193f, 120f, 38f, mMajorBGPaint);
