@@ -22,9 +22,9 @@ public class D8ReleaseDataListenerService extends WearableListenerService {
     if (messageEvent.getPath().equals(GET_D8_RELEASE_DATA)) {
 
       byte[] rawData = messageEvent.getData();
-      DataMap dateTimeRequested = DataMap.fromByteArray(rawData);
+      // DataMap dateTimeRequested = DataMap.fromByteArray(rawData);
 
-      Log.d(TAG, "Received watch face request message: " + dateTimeRequested);
+      Log.d(TAG, "Received watch face request message: " + new String(rawData));
     }
   }
 
