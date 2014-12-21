@@ -174,7 +174,8 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
                 }
               }
             });
-
+            // We only need to download D8 Release Data every 6 hours according to https://drupalreleasedate.com/about
+            mLoadD8ReleaseDataHandler.sendEmptyMessageDelayed(MSG_LOAD_D8RELEASEDATA, 21600000);
             break;
         }
       }
