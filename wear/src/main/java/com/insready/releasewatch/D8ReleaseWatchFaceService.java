@@ -28,7 +28,14 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.Result;
 import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.MessageApi;
+import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.NodeApi;
 import com.google.android.gms.wearable.Wearable;
@@ -47,14 +54,15 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
    * second hand.
    */
   private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
-  private String GET_D8_RELEASE_DATA = "drupal8";
+  private String GET_D8_RELEASE_DATA = "/host/getD8";
+  private String UPDATE_D8_RELEASE_DATA = "/wearable/updateD8";
 
   @Override
   public Engine onCreateEngine() {
     return new Engine();
   }
 
-  private class Engine extends CanvasWatchFaceService.Engine implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
+  private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
     static final int MSG_UPDATE_TIME = 0;
 
     /* graphic objects */
@@ -85,7 +93,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
     GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(D8ReleaseWatchFaceService.this)
             .addConnectionCallbacks(this)
             .addOnConnectionFailedListener(this)
-                    // Request access only to the Wearable API
+            // Request access only to the Wearable API
             .addApi(Wearable.API)
             .build();
 
@@ -93,6 +101,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
     public void onConnected(Bundle bundle) {
       Log.d(TAG, "onConnected: " + bundle);
       // Now you can use the Data Layer API
+      Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
     }
 
     @Override
@@ -139,8 +148,6 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         switch (message.what) {
           case MSG_LOAD_MEETINGS:
             cancelLoadMeetingTask();
-            mLoadMeetingsTask = new LoadD8ReleaseInfoTask();
-            mLoadMeetingsTask.execute();
             // the connected device to send the message to
             PendingResult nodes = Wearable.NodeApi.getConnectedNodes(mGoogleApiClient);
 
@@ -151,7 +158,6 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
                   Log.d(TAG, "Connected Nodes: " + result.getNodes().size());
                 }
                 for (Node node : result.getNodes()) {
-                  String msg = "Testing";
                   if (mGoogleApiClient == null) {
                     Log.d(TAG, "mGoogleApiClient initialization failed");
                   } else {
@@ -159,7 +165,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
                   }
 
                   PendingResult msgResult = Wearable.MessageApi.sendMessage(
-                          mGoogleApiClient, node.getId(), GET_D8_RELEASE_DATA, msg.getBytes());
+                          mGoogleApiClient, node.getId(), GET_D8_RELEASE_DATA, null);
                   msgResult.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                     @Override
                     public void onResult(final MessageApi.SendMessageResult feedback) {
@@ -417,52 +423,31 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       return isVisible() && !isInAmbientMode();
     }
 
-    /**
-     * Asynchronous task to load the meetings from the content provider and report the number of
-     * meetings back via {@link #onMeetingsLoaded}.
-     */
-    private class LoadD8ReleaseInfoTask extends AsyncTask<Void, Void, Integer> {
-      private PowerManager.WakeLock mWakeLock;
+    @Override
+    public void onDataChanged(DataEventBuffer dataEvents) {
+      Log.d(TAG, "New D8 Release Date comes!");
+      try {
+        for (DataEvent dataEvent : dataEvents) {
+          if (dataEvent.getType() != DataEvent.TYPE_CHANGED) {
+            continue;
+          }
 
-      @Override
-      protected Integer doInBackground(Void... voids) {
-     /*   PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
-        mWakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK, "CalendarWatchFaceWakeLock");
-        mWakeLock.acquire();
+          DataItem dataItem = dataEvent.getDataItem();
+          if (!dataItem.getUri().getPath().equals(UPDATE_D8_RELEASE_DATA)) {
+            continue;
+          }
 
-        long begin = System.currentTimeMillis();
-        Uri.Builder builder =
-                WearableCalendarContract.Instances.CONTENT_URI.buildUpon();
-        ContentUris.appendId(builder, begin);
-        ContentUris.appendId(builder, begin + DateUtils.DAY_IN_MILLIS);
-        final Cursor cursor = getContentResolver().query(builder.build(),
-                null, null, null, null);
-        int numMeetings = cursor.getCount();
-        if (Log.isLoggable(TAG, Log.VERBOSE)) {
-          Log.v(TAG, "Num meetings: " + numMeetings);
+          DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
+          DataMap dataMap = dataMapItem.getDataMap();
+          if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Config DataItem updated:" + dataMap);
+          }
+          //TODO update
+          Log.d(TAG, "Project Status Current Criticals: " + dataMap.getInt("CurrentCritical"));
+          Log.d(TAG, "D8 Release Date Estimate: " + dataMap.getString("Estimate"));
         }
-        return numMeetings;*/
-        return 0;
-      }
-
-      @Override
-      protected void onPostExecute(Integer result) {
-        /* get the number of meetings and set the next timer tick */
-        releaseWakeLock();
-        onMeetingsLoaded(result);
-      }
-
-      @Override
-      protected void onCancelled() {
-        releaseWakeLock();
-      }
-
-      private void releaseWakeLock() {
-        if (mWakeLock != null) {
-          mWakeLock.release();
-          mWakeLock = null;
-        }
+      } finally {
+        dataEvents.close();
       }
     }
 
