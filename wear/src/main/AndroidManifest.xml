@@ -2,7 +2,7 @@
     package="com.insready.releasewatch"
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:versionCode="1"
-    android:versionName="1.0-alpha1">
+    android:versionName="1.0">
 
     <uses-feature android:name="android.hardware.type.watch"/>
 
@@ -25,7 +25,10 @@
                 android:resource="@xml/watch_face"/>
             <meta-data
                 android:name="com.google.android.wearable.watchface.preview"
-                android:resource="@drawable/preview_d8release"/>
+                android:resource="@drawable/preview_d8release_square"/>
+            <meta-data
+                android:name="com.google.android.wearable.watchface.preview_circular"
+                android:resource="@drawable/preview_d8release_round"/>
 
             <intent-filter>
                 <action android:name="android.service.wallpaper.WallpaperService"/>

@@ -57,7 +57,15 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
   private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
     static final int MSG_UPDATE_TIME = 0;
-
+    static final int MSG_LOAD_D8RELEASEDATA = 0;
+    /* receiver to update the time zone */
+    final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
+      @Override
+      public void onReceive(Context context, Intent intent) {
+        mTime.clear(intent.getStringExtra("time-zone"));
+        mTime.setToNow();
+      }
+    };
     /* graphic objects */
     Bitmap mBackgroundBitmap;
     Bitmap mBackgroundScaledBitmap;
@@ -74,22 +82,16 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
     Paint mMajorPaint;
     Paint mEstimatePaint;
     Paint mMajorBGPaint;
-
+    float mRoundSquareRatio = 0f; // 1 means round, 280/320 = 0.875 means square
     boolean mMute;
-
     /* a time object */
     Time mTime;
-
     /**
      * Whether the display supports fewer bits for each color in ambient mode. When true, we
      * disable anti-aliasing in ambient mode.
      */
     boolean mLowBitAmbient;
-
     boolean mRegisteredTimeZoneReceiver = false;
-
-    static final int MSG_LOAD_D8RELEASEDATA = 0;
-
     GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(D8ReleaseWatchFaceService.this)
             .addConnectionCallbacks(this)
             .addOnConnectionFailedListener(this)
@@ -114,6 +116,71 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
       Log.d(TAG, "onConnectionFailed: " + connectionResult);
     }
 
+    @Override
+    public void onCreate(SurfaceHolder holder) {
+      if (Log.isLoggable(TAG, Log.DEBUG)) {
+        Log.d(TAG, "onCreate");
+      }
+      super.onCreate(holder);
+
+      /* configure the system UI */
+      setWatchFaceStyle(new WatchFaceStyle.Builder(D8ReleaseWatchFaceService.this)
+              .setCardPeekMode(WatchFaceStyle.PEEK_MODE_SHORT)
+              .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
+              .setShowSystemUiTime(false)
+              .build());
+
+            /* load the background image */
+      Resources resources = D8ReleaseWatchFaceService.this.getResources();
+      Drawable backgroundDrawable = resources.getDrawable(R.drawable.bg);
+      mBackgroundBitmap = ((BitmapDrawable) backgroundDrawable).getBitmap();
+
+            /* create graphic styles */
+      mHourPaint = new Paint();
+      mHourPaint.setARGB(255, 200, 200, 200);
+      mHourPaint.setStrokeWidth(5.f);
+      mHourPaint.setAntiAlias(true);
+      mHourPaint.setStrokeCap(Paint.Cap.ROUND);
+
+      mMinutePaint = new Paint();
+      mMinutePaint.setARGB(255, 200, 200, 200);
+      mMinutePaint.setStrokeWidth(3.f);
+      mMinutePaint.setAntiAlias(true);
+      mMinutePaint.setStrokeCap(Paint.Cap.ROUND);
+
+      mSecondPaint = new Paint();
+      mSecondPaint.setARGB(255, 255, 0, 0);
+      mSecondPaint.setStrokeWidth(2.f);
+      mSecondPaint.setAntiAlias(true);
+      mSecondPaint.setStrokeCap(Paint.Cap.ROUND);
+
+      mTickPaint = new Paint();
+      mTickPaint.setARGB(100, 255, 255, 255);
+      mTickPaint.setStrokeWidth(2.f);
+      mTickPaint.setAntiAlias(true);
+
+      mCriticalPaint = new Paint();
+      mCriticalPaint.setARGB(255, 255, 255, 255);
+      mCriticalPaint.setAntiAlias(true);
+
+      mMajorPaint = new Paint();
+      mMajorPaint.setARGB(255, 255, 255, 255);
+      mMajorPaint.setAntiAlias(true);
+
+      mMajorBGPaint = new Paint();
+      mMajorBGPaint.setARGB(255, 255, 153, 0);
+      mMajorBGPaint.setAntiAlias(true);
+
+      mEstimatePaint = new Paint();
+      mEstimatePaint.setARGB(255, 255, 255, 255);
+      mEstimatePaint.setAntiAlias(true);
+
+
+      /* allocate an object to hold the time */
+      mTime = new Time();
+
+    }
+
     /**
      * Handler to update the time once a second in interactive mode.
      */
@@ -136,6 +203,21 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         }
       }
     };
+
+    @Override
+    public void onDestroy() {
+      mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
+      super.onDestroy();
+    }
+
+    @Override
+    public void onPropertiesChanged(Bundle properties) {
+      super.onPropertiesChanged(properties);
+      mLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
+      if (Log.isLoggable(TAG, Log.DEBUG)) {
+        Log.d(TAG, "onPropertiesChanged: low-bit ambient = " + mLowBitAmbient);
+      }
+    }
 
     /**
      * Handler to load the meetings once a minute in interactive mode.
@@ -180,98 +262,6 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         }
       }
     };
-
-    /* receiver to update the time zone */
-    final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
-      @Override
-      public void onReceive(Context context, Intent intent) {
-        mTime.clear(intent.getStringExtra("time-zone"));
-        mTime.setToNow();
-      }
-    };
-
-    @Override
-    public void onCreate(SurfaceHolder holder) {
-      if (Log.isLoggable(TAG, Log.DEBUG)) {
-        Log.d(TAG, "onCreate");
-      }
-      super.onCreate(holder);
-
-            /* configure the system UI */
-      setWatchFaceStyle(new WatchFaceStyle.Builder(D8ReleaseWatchFaceService.this)
-              .setCardPeekMode(WatchFaceStyle.PEEK_MODE_SHORT)
-              .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
-              .setShowSystemUiTime(false)
-              .build());
-
-            /* load the background image */
-      Resources resources = D8ReleaseWatchFaceService.this.getResources();
-      Drawable backgroundDrawable = resources.getDrawable(R.drawable.bg);
-      mBackgroundBitmap = ((BitmapDrawable) backgroundDrawable).getBitmap();
-
-            /* create graphic styles */
-      mHourPaint = new Paint();
-      mHourPaint.setARGB(255, 200, 200, 200);
-      mHourPaint.setStrokeWidth(5.f);
-      mHourPaint.setAntiAlias(true);
-      mHourPaint.setStrokeCap(Paint.Cap.ROUND);
-
-      mMinutePaint = new Paint();
-      mMinutePaint.setARGB(255, 200, 200, 200);
-      mMinutePaint.setStrokeWidth(3.f);
-      mMinutePaint.setAntiAlias(true);
-      mMinutePaint.setStrokeCap(Paint.Cap.ROUND);
-
-      mSecondPaint = new Paint();
-      mSecondPaint.setARGB(255, 255, 0, 0);
-      mSecondPaint.setStrokeWidth(2.f);
-      mSecondPaint.setAntiAlias(true);
-      mSecondPaint.setStrokeCap(Paint.Cap.ROUND);
-
-      mTickPaint = new Paint();
-      mTickPaint.setARGB(100, 255, 255, 255);
-      mTickPaint.setStrokeWidth(2.f);
-      mTickPaint.setAntiAlias(true);
-
-      mCriticalPaint = new Paint();
-      mCriticalPaint.setARGB(255, 255, 255, 255);
-      mCriticalPaint.setTextSize(40);
-      mCriticalPaint.setAntiAlias(true);
-
-      mMajorPaint = new Paint();
-      mMajorPaint.setARGB(255, 255, 255, 255);
-      mMajorPaint.setTextSize(25);
-      mMajorPaint.setAntiAlias(true);
-
-      mMajorBGPaint = new Paint();
-      mMajorBGPaint.setARGB(255, 255, 153, 0);
-      mMajorBGPaint.setAntiAlias(true);
-
-      mEstimatePaint = new Paint();
-      mEstimatePaint.setARGB(255, 255, 255, 255);
-      mEstimatePaint.setTextSize(18);
-      mEstimatePaint.setAntiAlias(true);
-
-
-      /* allocate an object to hold the time */
-      mTime = new Time();
-
-    }
-
-    @Override
-    public void onDestroy() {
-      mUpdateTimeHandler.removeMessages(MSG_UPDATE_TIME);
-      super.onDestroy();
-    }
-
-    @Override
-    public void onPropertiesChanged(Bundle properties) {
-      super.onPropertiesChanged(properties);
-      mLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
-      if (Log.isLoggable(TAG, Log.DEBUG)) {
-        Log.d(TAG, "onPropertiesChanged: low-bit ambient = " + mLowBitAmbient);
-      }
-    }
 
     @Override
     public void onTimeTick() {
@@ -334,14 +324,22 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
 
       // Draw D8 Release info
       if (!isInAmbientMode() && mCurCritical != null && mCurMajor != null && mEstimate != null) {
-        Log.d(TAG, "Drawing D8 Data.");
-        canvas.drawCircle(152f, 238f, 48.5f, mSecondPaint);
-        canvas.drawText(mCurCritical + "", 127f, 250f, mCriticalPaint);
-        canvas.drawText(mFromYesterdayCritical + "", 143f, 270f, mEstimatePaint);
-        canvas.drawCircle(193f, 120f, 38f, mMajorBGPaint);
-        canvas.drawText(mCurMajor + "", 170f, 130f, mMajorPaint);
-        canvas.drawText(mFromYesterdayMajor + "", 180f, 150f, mEstimatePaint);
-        canvas.drawText(mEstimate, 40f, 150f, mEstimatePaint);
+        // Detect Round or Square
+        if (mRoundSquareRatio == 0f) {
+          mRoundSquareRatio = canvas.getWidth() / 320f;
+          mCriticalPaint.setTextSize(40 * mRoundSquareRatio);
+          mMajorPaint.setTextSize(25 * mRoundSquareRatio);
+          mEstimatePaint.setTextSize(18 * mRoundSquareRatio);
+        }
+        Log.d(TAG, "D8 Data comes in. Drawing on screen ratio: " + mRoundSquareRatio + "; width is: " + canvas.getWidth());
+
+        canvas.drawCircle(152f * mRoundSquareRatio, 238f * mRoundSquareRatio, 48.5f * mRoundSquareRatio, mSecondPaint);
+        canvas.drawText(mCurCritical + "", 127f * mRoundSquareRatio, 250f * mRoundSquareRatio, mCriticalPaint);
+        canvas.drawText(mFromYesterdayCritical + "", 143f * mRoundSquareRatio, 270f * mRoundSquareRatio, mEstimatePaint);
+        canvas.drawCircle(193f * mRoundSquareRatio, 120f * mRoundSquareRatio, 38f * mRoundSquareRatio, mMajorBGPaint);
+        canvas.drawText(mCurMajor + "", 170f * mRoundSquareRatio, 130f * mRoundSquareRatio, mMajorPaint);
+        canvas.drawText(mFromYesterdayMajor + "", 180f * mRoundSquareRatio, 150f * mRoundSquareRatio, mEstimatePaint);
+        canvas.drawText(mEstimate, 40f * mRoundSquareRatio, 150f * mRoundSquareRatio, mEstimatePaint);
       }
 
       // Find the center. Ignore the window insets so that, on round watches with a
@@ -488,6 +486,7 @@ public class D8ReleaseWatchFaceService extends CanvasWatchFaceService {
         dataEvents.close();
       }
     }
+
 
   }
 
